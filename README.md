@@ -11,6 +11,7 @@ Product requirements and technical architecture for the **Aegis AML Compliance P
 ## Documents
 
 - [`product-requirements-and-architecture.md`](./product-requirements-and-architecture.md) — Engineering build specification (v1.0)
+- [`designs/2026-09-23-vertical-slice-ingest-structuring-alert-audit.md`](./designs/2026-09-23-vertical-slice-ingest-structuring-alert-audit.md) — First vertical-slice design (ingest → structuring → alert → audit)
 
 ## How to use this repo
 

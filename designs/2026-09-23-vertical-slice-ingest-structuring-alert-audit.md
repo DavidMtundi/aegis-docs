@@ -1,6 +1,6 @@
 # Vertical Slice Design: Ingest → Structuring → Alert → Audit
 
-**Status:** Design baseline candidate (awaiting final approval)  
+**Status:** APPROVED — DESIGN BASELINE  
 **Date:** 2026-09-23  
 **Product:** Aegis AML Compliance Platform  
 **Repositories:** `aegis` (implementation), `aegis-docs` (this document)  
@@ -164,6 +164,8 @@ Infrastructure
 
 **The arrows represent contract consumption / orchestration calls, not direct database access. Infrastructure is the only layer that accesses EF Core persistence.**
 
+`ITransactionReadPort` is a **Transactions-owned application contract**. Infrastructure provides its implementation. Do not define this interface under Infrastructure.
+
 Modules must not reference each other’s persistence models. Application may reference module application services / ports; Infrastructure references modules as needed to map entities.
 
 ---
@@ -278,20 +280,18 @@ Logs/metrics   = how the system behaved
 
 #### Transactionality
 
-For the successful synchronous pipeline:
-
-> **Transaction persistence, alert persistence (when created), and corresponding audit writes must participate in the same database transaction where practical.**
-
-At minimum, for a new ingest that produces an alert:
+For a **new ingest**, the following must commit atomically in **one** database transaction:
 
 ```text
 CanonicalTransaction
-Alert
 TRANSACTION_INGESTED audit
-ALERT_CREATED audit
+Alert (if triggered and a new alert row is created)
+ALERT_CREATED audit (if a new alert is created)
 ```
 
-must commit atomically. Do not leave an alert without its audit record because a later audit write failed outside the transaction.
+If any required write fails, **the application operation fails and the database transaction rolls back**.
+
+Feature calculation and rule evaluation may run before the final commit as long as they do **not** independently commit persistence.
 
 Duplicate ingest paths that do not create work should not emit duplicate `TRANSACTION_INGESTED` audits.
 
@@ -308,6 +308,18 @@ TenantId
 ActorId
 IngestTransactionCommand / CanonicalTransaction payload
 CorrelationId
+```
+
+For HTTP requests, `TenantId` and `ActorId` are derived from trusted `ITenantContext` (JWT) and are **never accepted as trusted client-supplied fields**. Request bodies must not carry a client-chosen `tenantId` that the server trusts.
+
+```text
+JWT → ITenantContext → Application command
+```
+
+not:
+
+```text
+HTTP body.tenantId → application
 ```
 
 **Output**
@@ -354,8 +366,8 @@ The API knows only: “invoke this use case.” It does not know AML semantics.
 |---------|--------|--------|
 | Tenant, User, Role, Permission, login/JWT | `Identity` | Extend existing `Tenant` |
 | Customer, Individual/Business (minimal), Account | `Customers` (new) | Account stays here for the slice |
-| Canonical transaction, ingest, `ITransactionReadPort` | `Transactions` | |
-| Feature calculation | `Features` | Owns `IFeatureCalculator` |
+| Canonical transaction, ingest | `Transactions` | Owns `ITransactionReadPort` (application contract); Infrastructure implements it |
+| Feature calculation | `Features` | Owns `IFeatureCalculator`; Infrastructure may implement persistence helpers if needed |
 | Rules, versions, evaluation | `Aml` | Seed persists `STRUCTURING_001` into `aml.rules` / `aml.rule_versions` |
 | Alert lifecycle + dedupe | `Alerts` | Dedupe lives here, not in AML |
 | Immutable audit | `Audit` | |
@@ -441,13 +453,13 @@ All business APIs require JWT and operate inside `ITenantContext`.
 | Method | Path | Behavior |
 |--------|------|----------|
 | `POST` | `/api/v1/auth/login` | Issue access token |
-| `POST` | `/api/v1/tenants` | Bootstrap (dev/seed; tighten later) |
+| `POST` | `/api/v1/tenants` | **Dev-only** local bootstrap for this slice — must not be an unrestricted production endpoint |
 | `POST` | `/api/v1/customers` | Create customer |
 | `GET` | `/api/v1/customers/{id}` | Get customer |
 | `POST` | `/api/v1/customers/{id}/accounts` | Create account |
 | `GET` | `/api/v1/accounts/{id}` | Get account |
 | `POST` | `/api/v1/transactions` | Map to `IngestAndEvaluateStructuring` |
-| `POST` | `/api/v1/transactions/bulk` | Call use case per **new** row |
+| `POST` | `/api/v1/transactions/bulk` | One `IngestAndEvaluateStructuring` (and one DB transaction) **per row** — never one DB transaction for the whole batch |
 | `GET` | `/api/v1/transactions/{id}` | Get transaction |
 | `GET` | `/api/v1/alerts` | List (filters: status, customer) |
 | `GET` | `/api/v1/alerts/{id}` | Detail + evidence |
@@ -511,7 +523,7 @@ All business APIs require JWT and operate inside `ITenantContext`.
 ### Positive
 
 - Tenant A → Customer A → Account A → **7 × 95,000 KES** credits within 24h (business timestamps)  
-- Expect: 7 transactions; features count=7, sum=665,000, max=95,000; all three conditions true; **exactly one** alert for the dedupe identity; evidence has rule/version/facts/tx ids; ingest audits + `ALERT_CREATED`; Tenant B cannot read Tenant A’s alert.
+- Expect: 7 transactions; features count=7, sum=665,000, max=95,000; seeded rule uses `conditions.all` (**logical AND**) so all three conditions evaluate true via the **generic** group evaluator (not structuring-specific C#); **exactly one** alert for the dedupe identity; evidence has rule/version/facts/tx ids; ingest audits + `ALERT_CREATED`; Tenant B cannot read Tenant A’s alert.
 
 ### Negative
 
@@ -548,14 +560,11 @@ Threshold values in the seeded rule are **demo defaults** for tests. Real instit
 
 ---
 
-## 13. Next step after approval
+## 13. Next step
 
-Once this design is accepted as the implementation contract:
+This document is the **approved design baseline**. Architecture changes stop here for this slice.
 
-1. Write a detailed implementation plan (PR-by-PR tasks, files, interfaces, migrations, tests, and explicit non-goals).
-2. Start **PR 1** on `aegis`.
-
-Do not begin coding until this document is approved as the baseline.
+Next artifact: implementation plan mapping **PR1 → PR5** to projects/files, interfaces, migrations, tests, acceptance criteria, and explicit non-goals. Then start **PR 1** on `aegis`.
 
 ---
 
@@ -565,3 +574,4 @@ Do not begin coding until this document is approved as the baseline.
 |------|--------|
 | 2026-09-23 | Initial vertical-slice design from brainstorming (Sections 1–3 locked with refinements) |
 | 2026-09-23 | Review pass: contract-consumption diagram; `IngestAndEvaluateStructuring` I/O; business timestamp semantics; money/`numeric` + KES-only; atomic tx/alert/audit; alert-level dedupe; persisted rule seed |
+| 2026-09-23 | **APPROVED — DESIGN BASELINE**: Transactions owns `ITransactionReadPort`; atomic ingest set named; per-row bulk boundaries; tenant bootstrap is dev-only; TenantId/ActorId from `ITenantContext` only |

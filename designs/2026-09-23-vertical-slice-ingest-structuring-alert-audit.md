@@ -1,6 +1,6 @@
 # Vertical Slice Design: Ingest → Structuring → Alert → Audit
 
-**Status:** Draft for review  
+**Status:** Design baseline candidate (awaiting final approval)  
 **Date:** 2026-09-23  
 **Product:** Aegis AML Compliance Platform  
 **Repositories:** `aegis` (implementation), `aegis-docs` (this document)  
@@ -15,6 +15,21 @@ Prove the core architectural assumption of Aegis:
 > Can a tenant ingest financial data, evaluate a configurable AML policy, generate an explainable alert, and preserve an auditable trail end-to-end?
 
 This is a **vertical-slice milestone**, delivered as a sequence of small PRs — not “build all of Sprint 1 in isolation.”
+
+The first vertical slice proves the **architecture**, not merely a feature. It must demonstrate:
+
+- tenant isolation
+- canonical transaction ingestion
+- idempotency
+- feature abstraction
+- configurable rules
+- rule versioning
+- explainability
+- alert deduplication
+- auditability
+- cross-module orchestration
+
+without prematurely building KYC, screening, cases, AI, or event infrastructure.
 
 ### Minimum demonstrable scenario
 
@@ -38,8 +53,12 @@ Do **not** build in this slice:
 - Production-grade rule simulation
 - Full rule CRUD / compliance UI for rule management
 - Event bus / outbox (design for later; not implement now)
+- Multi-currency / FX normalization
+- Auditing every non-triggered rule evaluation
 
 Do **not** architect these out: keep module shells, ports, and schemas so they plug in later.
+
+The implementation plan must state **what not to implement** as explicitly as what to implement, so this slice does not quietly expand into half the platform.
 
 ---
 
@@ -92,11 +111,13 @@ audit.audit_events
 ### 4.3 Application owns workflows; modules own capabilities
 
 ```text
-Aegis.Api  (transport)
+Aegis.Api  (transport adapter only)
     ↓
 Aegis.Application  (IngestAndEvaluateStructuring)
     ↓
-Transactions → Features → Aml → Alerts → Audit
+module capabilities via contracts
+    ↓
+Infrastructure (port implementations)
     ↓
 AegisDbContext / PostgreSQL
 ```
@@ -108,23 +129,46 @@ AegisDbContext / PostgreSQL
 
 No event bus in this slice. Keep the path synchronous and deterministic. Domain events / outbox may replace the *caller* later without changing module contracts.
 
-### 4.5 Dependency direction (via contracts)
+### 4.5 Contract consumption (not compile-time “DbSet” coupling)
+
+Replace ambiguous dependency arrows with this meaning:
 
 ```text
-Transactions  (owns canonical tx + ITransactionReadPort)
-      ↑
-   Features   (IFeatureCalculator; consumes read port)
-      ↑
-     Aml      (IRuleEvaluationEngine; consumes IFeatureContext only)
-      ↓
-   Alerts     (consumes RuleEvaluationResult only)
-      ↓
-    Audit     (IAuditWriter; immutable append)
+Application orchestration (IngestAndEvaluateStructuring)
+        │
+        ├──────────────► Transactions
+        │                    │
+        │                    │ ITransactionReadPort
+        │                    ▼
+        ├──────────────► Features
+        │                    │
+        │                    │ IFeatureContext
+        │                    ▼
+        ├──────────────► Aml
+        │                    │
+        │                    │ RuleEvaluationResult
+        │                    ▼
+        ├──────────────► Alerts
+        │
+        └──────────────► Audit
+
+Infrastructure
+    implements persistence / read ports
+          │
+          ▼
+   AegisDbContext
+          │
+          ▼
+     PostgreSQL
 ```
+
+**The arrows represent contract consumption / orchestration calls, not direct database access. Infrastructure is the only layer that accesses EF Core persistence.**
+
+Modules must not reference each other’s persistence models. Application may reference module application services / ports; Infrastructure references modules as needed to map entities.
 
 ---
 
-## 5. Five core contracts
+## 5. Core contracts
 
 ### 5.1 Tenant context
 
@@ -137,9 +181,29 @@ Transactions  (owns canonical tx + ITransactionReadPort)
 ### 5.2 Canonical Transaction
 
 - Extend existing `CanonicalTransaction` in `Transactions`.
-- Required fields for the slice: `TenantId`, `ExternalReference` (idempotency), `AccountId`, `CustomerId`, `Amount` + currency, `Direction`, `TransactionType`, `Channel`, `Timestamp`, `Status`, optional country/counterparty/metadata.
+- Required fields for the slice: `TenantId`, `ExternalReference` (idempotency), `AccountId`, `CustomerId`, `Amount` + currency, `Direction`, `TransactionType`, `Channel`, **business/event `Timestamp`**, `Status`, optional country/counterparty/metadata.
+- Also record `CreatedAt` (ingestion/persistence time) separately from business `Timestamp`.
 - Transactions **reference** `CustomerId` / `AccountId`; they do **not** own Customer/Account aggregates.
-- Idempotency key: `(tenant_id, external_reference)` unique. Duplicate ingest returns the existing transaction and **does not** recalculate features, evaluate rules, or create alerts.
+- Idempotency key: `(tenant_id, external_reference)` unique.
+
+#### Money representation
+
+- API may accept `"amount": 95000, "currency": "KES"`.
+- Domain and persistence must **not** use floating-point for money.
+- Use `decimal` / .NET decimal (or equivalent) in domain; PostgreSQL `numeric` for amounts.
+- Currency is an ISO-4217 code string.
+- Rule threshold values (e.g. `450000`) are interpreted in the **same currency as the feature** being compared.
+- **This slice operates on a single currency (KES).** Multi-currency normalization / FX is deferred.
+
+#### Timestamp semantics for features
+
+> Feature windows are calculated using the transaction’s **business/event timestamp**, not the database insertion timestamp (`CreatedAt`).
+
+Example: event time `2026-09-23T10:00:00Z`, ingested at `10:04:32Z` → windows use **10:00**.
+
+For this slice:
+
+> Transaction timestamps must not be **materially in the future** relative to server UTC at ingest time. Reject such requests with a validation error. Exact skew tolerance is an implementation detail for the slice (recommend a small fixed tolerance such as a few minutes), not a compliance product decision.
 
 ### 5.3 Rule contract
 
@@ -152,6 +216,11 @@ Transactions  (owns canonical tx + ITransactionReadPort)
 - Rules consume **features only**, never raw transaction tables.
 - Reuse existing `IRuleEvaluationEngine` / `RuleEvaluationResult` / evidence types.
 - **Seeded structuring rule must use the same JSON rule definition and evaluator as future compliance-authored rules.** No special-case `if (count >= 5 && ...)` service in C#.
+- **The seed mechanism must populate the same persisted `Rule` / `RuleVersion` model used by future compliance configuration; it must not bypass rule persistence by embedding the rule definition only in application code or in-memory-only objects.** Flow:
+
+```text
+seed → aml.rules + aml.rule_versions → generic evaluator
+```
 
 ### 5.4 Alert contract
 
@@ -160,9 +229,9 @@ Transactions  (owns canonical tx + ITransactionReadPort)
 - Evidence must include: rule code, version number / version id, facts (feature, value, threshold, operator), and contributing transaction IDs.
 - Status for slice: start at `OPEN` (maps to PRD “NEW” for MVP).
 
-**Deduplication**
+#### Deduplication (alert-level only)
 
-- Evaluation window (AML): **rolling 24 hours**.
+- Evaluation window (AML): **rolling 24 hours** (based on business timestamps).
 - Dedupe bucket (alert suppression): **UTC calendar day** — explicitly *not* the same concept as the evaluation window.
 - Deduplication key:
 
@@ -173,6 +242,15 @@ Transactions  (owns canonical tx + ITransactionReadPort)
 Including `ruleVersionId` so activating a new version is not suppressed by an alert from a prior version in the same day.
 
 - On key collision: return existing alert; do not create another.
+
+**Dedupe is alert-level behavior, not rule-evaluation behavior.**
+
+```text
+AML Engine  →  “Did the rule trigger?”
+Alerts      →  “Should this trigger produce a new alert?”
+```
+
+The engine may return `TRIGGERED` multiple times for the same focus/day. The Alerts module applies dedupe. Do **not** put deduplication inside the AML evaluator.
 
 ### 5.5 Audit contract
 
@@ -187,8 +265,86 @@ TRANSACTION_INGESTED
 ALERT_CREATED
 ```
 
+Separation of concerns:
+
+```text
+Audit          = what the system did
+Alert evidence = why the system generated this alert
+Logs/metrics   = how the system behaved
+```
+
 - Explainability for detection lives primarily on **alert evidence**. Optional `RULE_EVALUATED` audit is out of scope for v1.
 - Evaluation telemetry (non-trigger) belongs in logs/metrics, not the audit table, unless a later compliance requirement demands otherwise.
+
+#### Transactionality
+
+For the successful synchronous pipeline:
+
+> **Transaction persistence, alert persistence (when created), and corresponding audit writes must participate in the same database transaction where practical.**
+
+At minimum, for a new ingest that produces an alert:
+
+```text
+CanonicalTransaction
+Alert
+TRANSACTION_INGESTED audit
+ALERT_CREATED audit
+```
+
+must commit atomically. Do not leave an alert without its audit record because a later audit write failed outside the transaction.
+
+Duplicate ingest paths that do not create work should not emit duplicate `TRANSACTION_INGESTED` audits.
+
+Later, an outbox can handle asynchronous external publication; an event bus is not required to achieve atomicity for this slice.
+
+### 5.6 Application contract: `IngestAndEvaluateStructuring`
+
+Cross-module workflow owned by `Aegis.Application` (not by Api controllers, not by Transactions).
+
+**Input**
+
+```text
+TenantId
+ActorId
+IngestTransactionCommand / CanonicalTransaction payload
+CorrelationId
+```
+
+**Output**
+
+```text
+TransactionId
+WasCreated          // false if idempotent duplicate
+Evaluations[]       // empty when WasCreated == false
+AlertIds[]          // empty when no new/existing-from-this-run alerts needed; may include existing id if triggered+deduped
+```
+
+**Behavior**
+
+```text
+NEW transaction
+    → persist CanonicalTransaction
+    → calculate features (business Timestamp window)
+    → evaluate active structuring rule version(s)
+    → for each TRIGGERED result: Alerts create-or-dedupe
+    → audit TRANSACTION_INGESTED (+ ALERT_CREATED when a new alert row is inserted)
+    → commit atomically with related writes
+    → return result
+
+DUPLICATE transaction (same tenant + externalReference)
+    → return existing TransactionId
+    → WasCreated = false
+    → NO feature recalculation
+    → NO rule evaluation
+    → NO new alert
+    → NO duplicate TRANSACTION_INGESTED audit
+```
+
+Invariant:
+
+> A transaction is evaluated only when it is newly accepted into the system.
+
+The API knows only: “invoke this use case.” It does not know AML semantics.
 
 ---
 
@@ -200,10 +356,10 @@ ALERT_CREATED
 | Customer, Individual/Business (minimal), Account | `Customers` (new) | Account stays here for the slice |
 | Canonical transaction, ingest, `ITransactionReadPort` | `Transactions` | |
 | Feature calculation | `Features` | Owns `IFeatureCalculator` |
-| Rules, versions, evaluation | `Aml` | Seed `STRUCTURING_001` via same JSON schema |
-| Alert lifecycle | `Alerts` | |
+| Rules, versions, evaluation | `Aml` | Seed persists `STRUCTURING_001` into `aml.rules` / `aml.rule_versions` |
+| Alert lifecycle + dedupe | `Alerts` | Dedupe lives here, not in AML |
 | Immutable audit | `Audit` | |
-| EF, repos, port implementations | `Infrastructure` | |
+| EF, repos, port implementations | `Infrastructure` | Only EF accessor |
 | Cross-module workflow | `Application` | Thin; not a dumping ground |
 | HTTP | `Api` | Thin controllers |
 
@@ -216,36 +372,35 @@ Empty shells (KYC, Screening, Cases, Risk, …) remain untouched.
 ### 7.1 New successful ingest
 
 ```text
-POST /api/v1/transactions
-  → validate
+HTTP POST /api/v1/transactions
+  → Api maps DTO → IngestAndEvaluateStructuring
+  → validate (incl. not materially future-dated Timestamp)
   → idempotency check
   → persist NEW CanonicalTransaction
-  → audit TRANSACTION_INGESTED
-  → Features.Calculate(CUSTOMER, customerId, window=24h)
-  → Aml.Evaluate(active structuring version, features, focus)
-  → if triggered: dedupe → Alert.Create → audit ALERT_CREATED
-  → return transaction + evaluation summary + alert id(s)
+  → Features.Calculate(CUSTOMER, customerId, window=24h from business Timestamp)
+  → Aml.Evaluate(active structuring version, features, FocusType=CUSTOMER, FocusId)
+  → if TRIGGERED: Alerts.CreateOrGetByDedupeKey → maybe new alert
+  → audit business actions inside same DB transaction
+  → return TransactionId, WasCreated=true, Evaluations, AlertIds
 ```
-
-Invariant:
-
-> A transaction is evaluated only when it is newly accepted into the system.
 
 ### 7.2 Duplicate ingest
 
 ```text
 existing transaction
   → return existing
+  → WasCreated=false
   → NO feature recalculation
   → NO rule evaluation
   → NO new alert
+  → NO duplicate ingest audit
 ```
 
 Later T+1 / replay may re-evaluate deliberately without changing this ingestion contract.
 
 ### 7.3 Feature set (structuring v1)
 
-Customer-scoped, rolling 24h:
+Customer-scoped, rolling 24h on **business timestamps**, KES only:
 
 ```text
 transaction_count_24h
@@ -258,7 +413,7 @@ Aggregation spans **all accounts** belonging to the customer.
 
 ### 7.4 Seeded rule (`STRUCTURING_001` v1)
 
-Configurable JSON (illustrative thresholds for demo/tests):
+Persisted seed (illustrative thresholds for demo/tests):
 
 ```json
 {
@@ -291,8 +446,8 @@ All business APIs require JWT and operate inside `ITenantContext`.
 | `GET` | `/api/v1/customers/{id}` | Get customer |
 | `POST` | `/api/v1/customers/{id}/accounts` | Create account |
 | `GET` | `/api/v1/accounts/{id}` | Get account |
-| `POST` | `/api/v1/transactions` | Ingest one + run orchestration |
-| `POST` | `/api/v1/transactions/bulk` | Ingest many; orchestrate per **new** row |
+| `POST` | `/api/v1/transactions` | Map to `IngestAndEvaluateStructuring` |
+| `POST` | `/api/v1/transactions/bulk` | Call use case per **new** row |
 | `GET` | `/api/v1/transactions/{id}` | Get transaction |
 | `GET` | `/api/v1/alerts` | List (filters: status, customer) |
 | `GET` | `/api/v1/alerts/{id}` | Detail + evidence |
@@ -343,8 +498,9 @@ All business APIs require JWT and operate inside `ITenantContext`.
 | Transactions | What a canonical transaction is; how to persist/query it |
 | Features | How transaction facts are calculated for a focus + window |
 | AML | How configurable JSON rules are evaluated against features |
-| Alerts | How a triggered result becomes a persisted, explainable alert |
+| Alerts | How a triggered result becomes a persisted, explainable, deduped alert |
 | Audit | How immutable compliance history is recorded |
+| Infrastructure | How ports map to EF / PostgreSQL |
 
 **The API does not own AML semantics.**
 
@@ -354,12 +510,12 @@ All business APIs require JWT and operate inside `ITenantContext`.
 
 ### Positive
 
-- Tenant A → Customer A → Account A → **7 × 95,000 KES** credits within 24h  
+- Tenant A → Customer A → Account A → **7 × 95,000 KES** credits within 24h (business timestamps)  
 - Expect: 7 transactions; features count=7, sum=665,000, max=95,000; all three conditions true; **exactly one** alert for the dedupe identity; evidence has rule/version/facts/tx ids; ingest audits + `ALERT_CREATED`; Tenant B cannot read Tenant A’s alert.
 
 ### Negative
 
-- **4 × 95,000 = 380,000** → **0 alerts** (count < 5 and/or sum < 450,000 depending on operators — with seeded rule, count fails).
+- **4 × 95,000 = 380,000** → **0 alerts** (count &lt; 5 with seeded rule).
 
 ### Boundary
 
@@ -367,17 +523,22 @@ All business APIs require JWT and operate inside `ITenantContext`.
 
 ### Duplicate
 
-- Re-POST same `externalReference` → same transaction id; no second evaluation; no second alert.
+- Re-POST same `externalReference` → same transaction id; `WasCreated=false`; no second evaluation; no second alert; no duplicate ingest audit.
 
 ### Cross-tenant
 
 - Tenant B token cannot `GET` Tenant A resources (alert, customer, transaction).
 
+### Optional hardening checks for the slice
+
+- Materially future-dated `timestamp` is rejected.
+- Amounts persist/query with decimal/`numeric` fidelity (no float drift).
+
 ---
 
 ## 11. Non-goals for implementation quality bar
 
-This slice must be production-*shaped* (tenant isolation, idempotency, explainability, audit, tests) but not production-*complete* (no pen-test, no full observability stack, no DR). Hardening is a later milestone per the PRD.
+This slice must be production-*shaped* (tenant isolation, idempotency, explainability, audit, atomic pipeline writes, tests) but not production-*complete* (no pen-test, no full observability stack, no DR). Hardening is a later milestone per the PRD.
 
 ---
 
@@ -389,12 +550,12 @@ Threshold values in the seeded rule are **demo defaults** for tests. Real instit
 
 ## 13. Next step after approval
 
-Once this design is reviewed and accepted:
+Once this design is accepted as the implementation contract:
 
-1. Write a detailed implementation plan (PR-by-PR tasks) via the planning workflow.
+1. Write a detailed implementation plan (PR-by-PR tasks, files, interfaces, migrations, tests, and explicit non-goals).
 2. Start **PR 1** on `aegis`.
 
-Do not begin coding until this document is approved.
+Do not begin coding until this document is approved as the baseline.
 
 ---
 
@@ -403,3 +564,4 @@ Do not begin coding until this document is approved.
 | Date | Change |
 |------|--------|
 | 2026-09-23 | Initial vertical-slice design from brainstorming (Sections 1–3 locked with refinements) |
+| 2026-09-23 | Review pass: contract-consumption diagram; `IngestAndEvaluateStructuring` I/O; business timestamp semantics; money/`numeric` + KES-only; atomic tx/alert/audit; alert-level dedupe; persisted rule seed |

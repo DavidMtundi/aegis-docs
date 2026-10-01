@@ -2297,6 +2297,17 @@ These decisions must be resolved by Product/Compliance rather than guessed by En
 16. Required transaction channels.
 17. Initial external integrations.
 
+### 67.1 Identity and fraud-signal decisions (post-MVP)
+
+Raised by the [KYC in 2026 research](./research/2026-10-01-sumsub-kyc-in-2026.md). None of these block the MVP:
+
+18. Device, session, and network signals as first-class entities, and which rule types use them to link customers that share attributes (fraud rings, mule networks).
+19. The ingestion contract for external identity-verification outcomes (method, liveness, injection or deepfake flags) as risk-engine inputs, without coupling to one provider.
+20. Whether rule or risk outcomes can request customer re-verification from the tenant (for example via webhook), and which events trigger it (document expiry, risk escalation).
+21. Whether rule results carry a recommended action (approve, step-up, block) alongside the alert, and the real-time latency budget that implies.
+22. A dormant-then-spike scenario for aged synthetic identities in the future scenario backlog.
+23. Whether transactions record the initiator type (human or AI agent) and the authorizing identity (Know Your Agent).
+
 Engineering should make the platform capable of configuring these values without embedding assumptions into the codebase.
 
 ---

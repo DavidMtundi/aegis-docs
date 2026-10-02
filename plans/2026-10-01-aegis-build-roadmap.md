@@ -105,7 +105,7 @@ Backend:
 | 1.4 | ✅ Alert escalate endpoint (`alert.escalate`, Analyst and up) and required dismissal reason (stored on the alert, migration `AlertDismissalReason`); assignee must be the id of an active tenant user; resolved or dismissed alerts return 409. Console has the reason form and escalate button |
 | 1.5 | ✅ `GET /cases/{id}/timeline` (audit events on the case and its linked alerts, plus note text; `case.read`), `POST /cases/{id}/alerts` (idempotent link), `POST /cases/{id}/escalate`. Case assignee is validated like alerts; closed cases return 409. Notes now audit as `CASE_NOTE_ADDED`. New `(tenant_id, EntityId)` index on audit events |
 | 1.6 | ✅ `GET /customers/{id}/overview`: profile, accounts, 50 most recent transactions, alerts and cases, plus summary counts. Each section is only returned when the caller holds its read permission. Open alert and case counts cover the 50 most recent items |
-| 1.7 | Batch ingest and CSV import (async job, per-row results, same idempotency key) |
+| 1.7 | ✅ Synchronous `POST /transactions/batch` (JSON) and `POST /transactions/import` (multipart CSV, 5 MB): up to 1,000 rows, processed in order, each row in its own scope and unit of work, per-row `CREATED`/`DUPLICATE`/`FAILED` results with row or line numbers. Same external-reference idempotency as single ingest. An async job queue is deferred until pilots send files larger than 1,000 rows |
 | 1.8 | Feature engine honours `Schedule.Lookback`, groups sums by currency; rename `IngestAndEvaluateStructuring` to `IngestAndEvaluateRules` and seed rules only on tenant bootstrap |
 | 1.9 | Audit list: paging and filters (entity, actor, type, date range) |
 

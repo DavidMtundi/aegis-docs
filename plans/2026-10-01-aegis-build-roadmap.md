@@ -99,12 +99,12 @@ Backend:
 
 | PR | Scope |
 |---|---|
-| 1.1 | EF global query filters for `TenantId` plus an isolation test per aggregate (alerts and audit currently untested) |
-| 1.2 | RBAC from the roles/permissions tables: seed `Admin`, `Analyst`, `Reviewer`, `Viewer` with permissions from PRD §10; replace hardcoded checks with permission checks |
-| 1.3 | User management API: list, invite/create, change roles, deactivate (Admin only, audited) |
-| 1.4 | Alert escalate endpoint and required dismissal reason; validate assignee is an active tenant user |
-| 1.5 | Case timeline endpoint built from audit events plus notes; link additional alerts to a case; case escalation |
-| 1.6 | Customer 360 endpoint: profile, accounts, recent transactions, alerts, cases |
+| 1.1 | ✅ EF global query filters for `TenantId` plus an isolation test per aggregate (alerts and audit currently untested) |
+| 1.2 | ✅ RBAC: PRD §10 permission catalog and built-in `Admin`, `Reviewer`, `Analyst`, `Viewer` grants in `Aegis.Shared/Security/Permissions.cs`, enforced with `[RequirePermission]` on every endpoint. The grants are code, not the `identity.roles` table; tenant-configurable roles are deferred until a pilot needs them. Analysts no longer read the full audit log (Reviewer and Admin do) |
+| 1.3 | ✅ User management API: list, create, change roles, deactivate (`user.manage`, audited). Admins cannot drop their own Admin role or deactivate themselves. A deactivated user's existing JWT stays valid until expiry; revocation lands with refresh tokens in Phase 5 |
+| 1.4 | ✅ Alert escalate endpoint (`alert.escalate`, Analyst and up) and required dismissal reason (stored on the alert, migration `AlertDismissalReason`); assignee must be the id of an active tenant user; resolved or dismissed alerts return 409. Console has the reason form and escalate button |
+| 1.5 | ✅ `GET /cases/{id}/timeline` (audit events on the case and its linked alerts, plus note text; `case.read`), `POST /cases/{id}/alerts` (idempotent link), `POST /cases/{id}/escalate`. Case assignee is validated like alerts; closed cases return 409. Notes now audit as `CASE_NOTE_ADDED`. New `(tenant_id, EntityId)` index on audit events |
+| 1.6 | ✅ `GET /customers/{id}/overview`: profile, accounts, 50 most recent transactions, alerts and cases, plus summary counts. Each section is only returned when the caller holds its read permission. Open alert and case counts cover the 50 most recent items |
 | 1.7 | Batch ingest and CSV import (async job, per-row results, same idempotency key) |
 | 1.8 | Feature engine honours `Schedule.Lookback`, groups sums by currency; rename `IngestAndEvaluateStructuring` to `IngestAndEvaluateRules` and seed rules only on tenant bootstrap |
 | 1.9 | Audit list: paging and filters (entity, actor, type, date range) |

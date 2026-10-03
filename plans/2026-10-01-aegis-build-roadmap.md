@@ -113,13 +113,15 @@ Console:
 
 | PR | Scope |
 |---|---|
-| 1.10 | Shared UI kit: `DataTable`, `Field`, loading/empty/error states, `Pagination`; move every page onto it and onto `lib/api` |
-| 1.11 | 401 redirects to login with return URL; role-aware actions (hide what the user can't do) |
-| 1.12 | Readable evidence panel: feature / actual value / threshold / pass-fail table (PRD §26), raw JSON behind a toggle |
-| 1.13 | Customer 360 page; transactions list page |
-| 1.14 | Case timeline, escalate, link alerts, assign to another user |
-| 1.15 | Audit viewer filters and paging; CSV import screen with per-row results |
-| 1.16 | Admin users page |
+| 1.10 | ✅ Shared UI kit (`components/ui`: `DataTable`, `Pagination`, `Field`/`Button`, loading/empty/error states, `PageHeader`, `Stat`) and a `useApiQuery` loading hook. List pages use server-side paging and `lib/api` modules. Console lint is down from 5 errors to 0 |
+| 1.11 | ✅ When the session disappears (an API 401 clears it), the console redirects to `/login?returnTo=…`; only same-app paths are accepted. An explicit logout carries no return URL. The nav and actions are filtered by a client mirror of the role grants (the API still enforces everything) |
+| 1.12 | ✅ Evidence table: feature / actual / rule / threshold / met, built from `conditionFacts`. All evaluated features and the raw JSON sit behind toggles |
+| 1.13 | ✅ Customer 360 on `GET /customers/{id}/overview` (accounts, alerts, cases, recent transactions, counts; sections the user can't read are hidden). Transactions list with customer and date filters |
+| 1.14 | ✅ Case page: timeline (audit events plus notes, including escalation reasons), escalate, link alert, assign to a named user. Adds `GET /api/v1/users/assignees`: active users who can work cases, id/name/email only, requires `case.update` |
+| 1.15 | ✅ Audit filters and paging (done in 1.9). CSV import screen: client-side checks (.csv, ≤ 5 MB), template download, created/duplicate/failed counts, per-row results linking to transactions and alerts |
+| 1.16 | ✅ Admin users page: create, change roles, deactivate (not offered on your own row; the API also blocks self-lockout) |
+
+Open from the exit criterion: the Playwright demo flow is not automated yet. Phase 1 was checked by hand in the browser against a seeded tenant (alert → case → note → link → assign → escalate → customer 360 → users → analyst role gating).
 
 **Exit:** every item in PRD §65 except risk and screening works from a clean environment, covered by the Playwright demo flow.
 
@@ -127,12 +129,14 @@ Console:
 
 | PR | Scope |
 |---|---|
-| 2.1 | Risk module: configurable, versioned risk model (factors and weights per tenant, PRD §30) |
-| 2.2 | Customer risk score calculation on customer change, alert, and nightly batch; score history with factor breakdown |
-| 2.3 | `GET /customers/{id}/risk` and risk in customer 360 |
-| 2.4 | Dashboard metrics API: open alerts by severity and age, SLA breaches, cases by status, alerts per rule, dismissal rate per rule (false-positive proxy) |
-| 2.5 | Console dashboard page (home route) |
-| 2.6 | Console risk panel with factor breakdown and history |
+| 2.1 | ✅ Risk module: a tenant risk model with weighted factors (high-risk geography, customer type, open alerts, high/critical alerts in a window, cases closed as suspicious or reported, transaction volume in a window) and LOW/MEDIUM/HIGH/CRITICAL band thresholds. Scores are the sum of factor points, capped at 100. Saving a change creates a new immutable version (`risk.manage`, Admin only, audited as `RISK_MODEL_UPDATED`); a default model is created the first time a tenant needs one. PEP and screening factors wait for Phase 3 |
+| 2.2 | ✅ Customers are rescored when they are created, when an ingested transaction raises a new alert, nightly (02:00 UTC, `Risk:NightlyBatch:Enabled`/`HourUtc`), manually, and through `POST /risk/recalculate-all` (`risk.manage`). A scoring failure is logged and never fails the customer create or ingest that triggered it. Every score is kept with its model version, trigger and per-factor points; a band change is audited as `RISK_SCORE_CHANGED` |
+| 2.3 | ✅ `GET /customers/{id}/risk` (current score plus the last 20; customers created before scoring existed are scored on first view) and `POST /customers/{id}/risk/recalculate` (`customer.write`). `GET`/`PUT /risk/model` |
+| 2.4 | ✅ `GET /dashboard`: open alerts by severity and age, alerts today, high-risk open, alert SLA breaches, a 14-day alert trend, top rules over 30 days with dismissal rate, cases by status and overdue, transactions ingested today and over 7 days, and the customer risk distribution. Sections the caller can't read are null. SLAs default to 3 days for alerts and 14 for cases (`Dashboard:AlertSlaDays`/`CaseSlaDays`) because PRD §67 leaves them open |
+| 2.5 | ✅ Console dashboard is the home route and the post-login default: stat tiles, CSS bar charts (no chart library), severity bars linking to the filtered alert queue (the alerts page now reads `?status=`/`?severity=`), top-rules table |
+| 2.6 | ✅ Customer page risk panel: score, band, change since the last score, per-factor points with explanations, history. Admin "Risk model" page to edit factors and bands, save a new version, and rescore all customers. API error messages no longer show JSON quotes |
+
+Checked by hand in the browser against a seeded tenant: dashboard figures, lazy first score (31, MEDIUM), an invalid band order rejected with the API message, a saved version adding `KE`, and a rescore to 61 (HIGH).
 
 ### Phase 3 — Screening (M7) · ~2 weeks
 

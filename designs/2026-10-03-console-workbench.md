@@ -1,6 +1,6 @@
 # Console workbench redesign
 
-Status: approved 2026-10-03. Plan: `plans/2026-10-03-console-workbench.md`.
+Status: implemented 2026-10-03 on branch `console-workbench`. Plan: `plans/2026-10-03-console-workbench.md`.
 
 ## Why
 

@@ -138,6 +138,15 @@ Open from the exit criterion: the Playwright demo flow is not automated yet. Pha
 
 Checked by hand in the browser against a seeded tenant: dashboard figures, lazy first score (31, MEDIUM), an invalid band order rejected with the API message, a saved version adding `KE`, and a rescore to 61 (HIGH).
 
+### Console workbench redesign (2026-10-03)
+
+Done on branch `console-workbench` in `aegis` and `aegis-console` (design `designs/2026-10-03-console-workbench.md`, plan `plans/2026-10-03-console-workbench.md`).
+
+- API, additive only: alert, case and transaction responses carry customer and assignee names (resolved in batches through `IDisplayNameLookup`, no per-row queries); cases list their linked alerts by rule name, severity and status; customer responses carry the latest risk band. `GET /alerts` takes `view=open|mine|unassigned|pastSla` and `customerId`; `GET /settings/sla` exposes the SLA days to any signed-in user.
+- Console: sidebar shell grouped by job with open counts, a customer jump box and a loading skeleton instead of the "Checking session…" flash. The alert queue has view tabs, customer names, age against the SLA and readable status chips. Alert and case pages are two-column workspaces: a plain-language headline, a neutral check for met conditions, related transactions, and a right rail with actions, SLA and a customer card. Amounts read `KES 95,000.00` and dates use one format everywhere. Transactions filter by customer name. Login is a split layout.
+- The alert queue no longer reads `?status=`; the view tabs replace it, and `?severity=` still works.
+- Checked in the browser at 1024 px and 1440 px (no horizontal overflow) and at 800 px, where the sidebar becomes a menu drawer.
+
 ### Phase 3 — Screening (M7) · ~2 weeks
 
 | PR | Scope |

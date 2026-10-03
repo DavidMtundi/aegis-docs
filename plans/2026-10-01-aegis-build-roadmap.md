@@ -55,6 +55,13 @@ The "Request access" form discards submissions. No OpenGraph, sitemap, robots, o
 Terms, and Security links go to `/#contact`. Testimonials and "100%" stats are unattributed. Autoplay carousel
 has no pause or reduced-motion handling. Four unused components. README describes a different stack. No tests.
 
+**Update 2026-10-03:** redesigned on branch `marketing-redesign` (see
+[design](../designs/2026-10-03-marketing-site.md)). Homepage cut from 14 sections to 7, built features shown
+with real console screenshots, screening and simulation marked "Planned", testimonials and invented stats
+removed, dead Privacy/Terms/Security links removed, the form replaced by a prefilled mailto link, and the
+visual system matched to the console. `lib/` logic has unit tests. Still open: OpenGraph, sitemap,
+robots, canonical URLs, README, and swapping the placeholder `access@aegis.example` address.
+
 ### Environment
 
 `dotnet` isn't installed on the dev machine and neither frontend has `node_modules`, so nothing has been

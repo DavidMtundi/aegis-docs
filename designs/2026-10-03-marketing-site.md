@@ -1,6 +1,6 @@
 # Marketing site redesign (aegis-web)
 
-Status: approved 2026-10-03. Plan: `plans/2026-10-03-marketing-site.md`.
+Status: implemented 2026-10-03 on branch `marketing-redesign` in `aegis-web`. Plan: `plans/2026-10-03-marketing-site.md`.
 
 ## Why
 

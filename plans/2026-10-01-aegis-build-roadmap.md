@@ -106,8 +106,8 @@ Backend:
 | 1.5 | ✅ `GET /cases/{id}/timeline` (audit events on the case and its linked alerts, plus note text; `case.read`), `POST /cases/{id}/alerts` (idempotent link), `POST /cases/{id}/escalate`. Case assignee is validated like alerts; closed cases return 409. Notes now audit as `CASE_NOTE_ADDED`. New `(tenant_id, EntityId)` index on audit events |
 | 1.6 | ✅ `GET /customers/{id}/overview`: profile, accounts, 50 most recent transactions, alerts and cases, plus summary counts. Each section is only returned when the caller holds its read permission. Open alert and case counts cover the 50 most recent items |
 | 1.7 | ✅ Synchronous `POST /transactions/batch` (JSON) and `POST /transactions/import` (multipart CSV, 5 MB): up to 1,000 rows, processed in order, each row in its own scope and unit of work, per-row `CREATED`/`DUPLICATE`/`FAILED` results with row or line numbers. Same external-reference idempotency as single ingest. An async job queue is deferred until pilots send files larger than 1,000 rows |
-| 1.8 | Feature engine honours `Schedule.Lookback`, groups sums by currency; rename `IngestAndEvaluateStructuring` to `IngestAndEvaluateRules` and seed rules only on tenant bootstrap |
-| 1.9 | Audit list: paging and filters (entity, actor, type, date range) |
+| 1.8 | ✅ Each rule version is evaluated over its `Schedule.Lookback` (up to 90 days; features calculated once per distinct window). Generic features `transaction_count`, `transaction_sum`, `max_single_amount`, `credit_sum`, `debit_sum`, `pass_through_ratio` cover that window, and the `_24h` and `_1h` names keep their fixed windows. Aggregates only use the triggering transaction's currency, and there is a new `currency` feature. The KES-only restriction is lifted: accounts take any ISO 4217 code and a transaction must match its account's currency. Seeded rules now include `currency IN [KES]`, but rules seeded for existing tenants don't have it, so add a new version if those tenants take other currencies. Renamed to `IngestAndEvaluateRules`; rules are seeded at tenant bootstrap only |
+| 1.9 | ✅ | Audit list: paging and filters (entity, actor, type, date range) |
 
 Console:
 

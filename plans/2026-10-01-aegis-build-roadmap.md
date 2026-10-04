@@ -156,12 +156,23 @@ Done on branch `console-workbench` in `aegis` and `aegis-console` (design `desig
 
 ### Phase 3 — Screening (M7) · ~2 weeks
 
+Done on branch `phase-3-screening` in `aegis` and `aegis-console` (plan [`plans/2026-10-04-phase-3-screening.md`](./2026-10-04-phase-3-screening.md)).
+
+Decisions (owner, 2026-10-04):
+
+- First customers: banks and SACCOs.
+- Lists: UN consolidated list, OFAC SDN list, and one tenant-uploaded CSV list (categories `PEP`, `SANCTIONS`, `WATCHLIST`). EU/UK lists later.
+- A confirmed match raises an alert and adds risk points; no automatic blocking. Severity is CRITICAL for `SANCTIONS` and `WATCHLIST` matches and HIGH for `PEP` matches (enhanced due diligence rather than a freeze).
+- Risk factors `SANCTIONS_MATCH` (weight 100, so the score caps at 100 = CRITICAL), `WATCHLIST_MATCH` (50) and `PEP_MATCH` (30).
+
 | PR | Scope |
 |---|---|
-| 3.1 | Screening domain per PRD §31: request, provider port, match results, match review, decision; all audited |
-| 3.2 | Local provider adapter backed by a loaded sanctions/PEP list file (no vendor lock-in; real vendors later) |
-| 3.3 | Screen on customer create/update; screening hits feed the risk engine |
-| 3.4 | Console screening queue and match review |
+| 3.1 | ✅ Screening domain: name matching with birth-year filtering, possible matches recorded once per customer and listed subject, confirm or dismiss with a reason; all audited (plan Tasks 1–6) |
+| 3.2 | ✅ UN and OFAC XML parsers behind a downloader port, refreshed daily from the official URLs or a local file, plus a tenant CSV list via `PUT /screening/tenant-list` (plan Tasks 2, 3, 5) |
+| 3.3 | ✅ Customers are screened on create (optional date of birth) and on every list change; a confirmed match raises an alert and rescores the customer through the new screening risk factors (plan Tasks 6–8). Screening on update waits for a customer update endpoint |
+| 3.4 | ✅ Console screening queue, match review page with confirm/dismiss, a screening panel on the customer page, and an admin page for list status, refresh and tenant list upload (plan Tasks 9–10) |
+
+Follow-ups: customer update endpoint (date of birth and name changes), EU/UK lists, country-name-to-ISO matching, delta rescreening for large customer bases, maker-checker on confirmations.
 
 ### Phase 4 — Rule authoring, simulation, approval · ~2 weeks
 
@@ -219,5 +230,5 @@ Done on branch `console-workbench` in `aegis` and `aegis-console` (design `desig
 1. Phase order: is risk (Phase 2) before screening (Phase 3) right for the first pilot institution?
 2. RBAC role set for 1.2: confirm `Admin`, `Analyst`, `Reviewer`, `Viewer`.
 3. Demo form destination for W.1 (Firebase function writing to Firestore, or an external form service).
-4. Screening data source for 3.2 (which public sanctions lists to load first: UN, OFAC, EU, Kenya FRC).
+4. ~~Screening data source for 3.2 (which public sanctions lists to load first: UN, OFAC, EU, Kenya FRC).~~ Decided 2026-10-04: UN and OFAC, plus a tenant-uploaded list for PEPs and the Kenya domestic list; EU/UK later.
 5. The PRD §67 open product decisions that block thresholds and SLAs (items 3–8).

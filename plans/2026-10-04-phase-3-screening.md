@@ -3430,7 +3430,7 @@ git commit -m "feat(screening): screening API, permissions, screen on customer c
   - `RiskFactorType.SANCTIONS_MATCH`, `PEP_MATCH`, `WATCHLIST_MATCH` (no parameters; full weight when the customer has a confirmed match of that category)
   - `RiskInputs(..., DateTimeOffset AsOf, IReadOnlyCollection<string>? ConfirmedScreeningCategories = null)`
   - Default model adds `SANCTIONS_MATCH` 100, `WATCHLIST_MATCH` 50, `PEP_MATCH` 30
-  - `ScreeningRiskFactorSync.SyncAsync(CancellationToken)` returns the number of tenants updated; runs at startup unless `Risk:SyncScreeningFactorsOnStartup` is `false`
+  - `ScreeningRiskFactorSync.SyncAsync(TenantId? onlyTenant, CancellationToken)` returns the number of tenants updated; runs at startup unless `Risk:SyncScreeningFactorsOnStartup` is `false`
 
 - [ ] **Step 1: Write the failing unit tests**
 

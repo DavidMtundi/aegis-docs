@@ -1927,9 +1927,9 @@ public sealed class WatchlistRefresherTests
         var result = await refresher.RefreshAsync(WatchlistSource.UN);
 
         Assert.Equal(WatchlistRefreshStatus.LOADED, result.Status);
-        Assert.Equal(3, result.EntryCount);
-        Assert.Equal(3, repo.Subjects.Count);
-        Assert.Equal(3, Assert.Single(repo.Loads).EntryCount);
+        Assert.Equal(4, result.EntryCount);
+        Assert.Equal(4, repo.Subjects.Count);
+        Assert.Equal(4, Assert.Single(repo.Loads).EntryCount);
     }
 
     [Fact]
@@ -2255,12 +2255,12 @@ public sealed class WatchlistRefreshTests : IAsyncLifetime
         var un = await refresher.RefreshAsync(WatchlistSource.UN);
         var ofac = await refresher.RefreshAsync(WatchlistSource.OFAC);
         Assert.Contains(un.Status, new[] { WatchlistRefreshStatus.LOADED, WatchlistRefreshStatus.UNCHANGED });
-        Assert.Equal(3, un.EntryCount);
+        Assert.Equal(4, un.EntryCount);
         Assert.Equal(2, ofac.EntryCount);
         Assert.Equal(WatchlistRefreshStatus.UNCHANGED, (await refresher.RefreshAsync(WatchlistSource.UN)).Status);
 
         var index = await scope.ServiceProvider.GetRequiredService<IGlobalWatchlist>().GetAsync();
-        Assert.Equal(5, index.Count);
+        Assert.Equal(6, index.Count);
     }
 }
 ```
@@ -2918,7 +2918,7 @@ public sealed class ScreeningApiTests : IAsyncLifetime
         var body = await _fx.AdminClient.GetFromJsonAsync<JsonElement>("/api/v1/screening/lists");
         var sources = body.GetProperty("sources").EnumerateArray().ToDictionary(
             s => s.GetProperty("source").GetString()!, s => s.GetProperty("entryCount").GetInt32());
-        Assert.Equal(3, sources["UN"]);
+        Assert.Equal(4, sources["UN"]);
         Assert.Equal(2, sources["OFAC"]);
         Assert.Equal(0, body.GetProperty("tenantList").GetProperty("entryCount").GetInt32());
     }

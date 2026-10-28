@@ -15,6 +15,7 @@ Product requirements and technical architecture for the **Aegis AML Compliance P
 - [`plans/2026-09-23-vertical-slice-pr1-pr5.md`](./plans/2026-09-23-vertical-slice-pr1-pr5.md) — Implementation plan (PR1–PR5)
 - [`plans/2026-10-01-aegis-build-roadmap.md`](./plans/2026-10-01-aegis-build-roadmap.md) — **Current roadmap**: audit of all repos and phased build plan to MVP and beyond
 - [`plans/2026-10-01-phase-0-hardening.md`](./plans/2026-10-01-phase-0-hardening.md) — Phase 0: toolchain and security hardening (detailed tasks)
+- [`plans/2026-10-04-phase-3-screening.md`](./plans/2026-10-04-phase-3-screening.md) — Phase 3: sanctions and PEP screening (UN, OFAC and tenant lists; match review; risk factors)
 - [`research/2026-10-01-sumsub-kyc-in-2026.md`](./research/2026-10-01-sumsub-kyc-in-2026.md) — Industry research: Sumsub *KYC in 2026* report (credited), plus how it maps to Aegis
 
 ## How to use this repo

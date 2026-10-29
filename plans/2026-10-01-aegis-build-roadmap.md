@@ -178,22 +178,22 @@ Follow-ups: customer update endpoint (date of birth and name changes), EU/UK lis
 
 | PR | Scope |
 |---|---|
-| 4.1 | Create new rule, suspend and retire versions |
-| 4.2 | Maker-checker approval: drafts need approval by a different user before activation (PRD §48) |
-| 4.3 | Rule simulation: run a draft against historical transactions, return would-be alerts and diff vs active version (PRD §23) |
-| 4.4 | Console rule editor with schema validation, simulation results, approval queue |
+| 4.1 | Create new rule, suspend and retire versions ✅ |
+| 4.2 | Maker-checker approval: drafts need approval by a different user before activation (PRD §48) ✅ |
+| 4.3 | Rule simulation: run a draft against historical transactions, return would-be alerts and diff vs active version (PRD §23) ✅ |
+| 4.4 | Console rule editor with schema validation, simulation results, approval queue ✅ |
 
 ### Phase 5 — Production hardening (M8) · ~2 weeks, can overlap Phases 3–4
 
 | PR | Scope |
 |---|---|
-| 5.1 | OpenTelemetry traces and metrics wired to the existing packages; correlation ID through audit |
-| 5.2 | Global rate limiting per tenant; request size limits; forwarded-headers config so the login limiter partitions by real client IP behind a proxy |
-| 5.3 | Refresh tokens and logout (PRD §36) |
-| 5.4 | CI for all three repos: build, test, lint, typecheck, dependency audit, container build |
-| 5.5 | Load test of ingest + evaluate against the PRD §43 targets |
-| 5.6 | Backup/restore runbook and tested restore |
-| 5.7 | Security review pass (separate session) |
+| 5.1 | OpenTelemetry traces and metrics wired to the existing packages; correlation ID through audit ✅ |
+| 5.2 | Global rate limiting per tenant; request size limits; forwarded-headers config so the login limiter partitions by real client IP behind a proxy ✅ |
+| 5.3 | Refresh tokens and logout (PRD §36) ✅ |
+| 5.4 | CI for all three repos: build, test, lint, typecheck, dependency audit, container build ✅ |
+| 5.5 | Load test of ingest + evaluate against the PRD §43 targets ✅ (baseline script + design note; no hard TPS in PRD) |
+| 5.6 | Backup/restore runbook and tested restore ✅ |
+| 5.7 | Security review pass (**separate session** — not in this hardening pass) |
 
 ### Phase 6 — Research follow-ups (post-MVP, gated on PRD §67.1 decisions)
 
